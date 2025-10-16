@@ -1,0 +1,46 @@
+# Siemens Automobile Digital Twin Configuration
+
+vehicle:
+  model: "Siemens EV-X1"
+  type: "Electric Vehicle"
+  year: 2025
+  weight_kg: 1800
+  max_speed_kmh: 200
+  
+powertrain:
+  motor_type: "Permanent Magnet Synchronous Motor"
+  max_power_kw: 150
+  max_torque_nm: 310
+  efficiency: 0.95
+  
+battery:
+  capacity_kwh: 75
+  voltage_nominal: 400
+  cells_series: 96
+  cells_parallel: 4
+  chemistry: "NMC (Nickel Manganese Cobalt)"
+  max_charge_rate_kw: 150
+  
+sensors:
+  temperature_sensors: 24
+  pressure_sensors: 8
+  vibration_sensors: 12
+  current_sensors: 4
+  voltage_sensors: 96
+  position_sensors: 16
+  
+simulation:
+  timestep_ms: 100
+  duration_hours: 1
+  update_frequency_hz: 10
+  
+analytics:
+  predictive_maintenance: true
+  anomaly_detection: true
+  performance_optimization: true
+  energy_efficiency_tracking: true
+  
+visualization:
+  3d_enabled: true
+  dashboard_port: 5000
+  update_rate_hz: 30

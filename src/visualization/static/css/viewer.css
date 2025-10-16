@@ -1,0 +1,123 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #111;
+    color: #fff;
+}
+
+#info-panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border-radius: 8px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    width: 250px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+#info-panel h1 {
+    margin-top: 0;
+    font-size: 1.2em;
+    border-bottom: 1px solid #555;
+    padding-bottom: 5px;
+}
+
+#info-panel .header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+#info-panel h3 {
+    margin: 0;
+    font-size: 1.2em;
+}
+
+#info-panel .telemetry .metric {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    font-size: 0.9em;
+}
+
+#info-panel .telemetry .metric span {
+    font-weight: normal;
+    color: #4CAF50; /* Green for values */
+}
+
+#telemetry-data p {
+    margin: 8px 0;
+}
+
+#telemetry-data span {
+    font-weight: bold;
+    color: #00d1ff;
+}
+
+#controls-panel {
+    top: 20px;
+    right: 20px;
+}
+
+#controls-panel h4 {
+    margin: 0 0 10px 0;
+}
+
+#controls-panel button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    margin: 0 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#controls-panel button:hover {
+    background-color: #45a049;
+}
+
+#legend-panel {
+    bottom: 20px;
+    left: 20px;
+}
+
+#legend-panel h4 {
+    margin: 0 0 10px 0;
+}
+
+#legend-panel ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#legend-panel li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+#legend-panel .color-box {
+    width: 15px;
+    height: 15px;
+    margin-right: 10px;
+    border: 1px solid #555;
+}
+
+#status-indicator {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background-color: #f44336; /* Red for disconnected */
+    transition: background-color 0.5s;
+}

@@ -1,0 +1,619 @@
+"""
+Enhanced 3D Real-time Visualization Server
+Serves 3D visualization with WebSocket updates for the Digital Twin
+"""
+
+from flask import Flask, render_template, jsonify
+from flask_socketio import SocketIO, emit
+import json
+import os
+import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'siemens_3d_viewer'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+
+@app.route('/')
+def index():
+    """Main 3D visualization page"""
+    return render_template('viewer_3d.html')
+
+
+@app.route('/api/telemetry/latest')
+def get_latest_telemetry():
+    """Get latest telemetry data"""
+    telemetry_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'data', 'telemetry_urban.json'
+    )
+    
+    if os.path.exists(telemetry_path):
+        with open(telemetry_path, 'r') as f:
+            data = json.load(f)
+            if data:
+                return jsonify(data[-1])
+    
+    return jsonify({
+        "motor": {"power_kw": 0, "temperature_c": 25, "torque_nm": 0, "rpm": 0, "health_score": 100},
+        "battery": {"soc_percent": 80, "temperature_c": 25, "voltage": 400, "current_a": 0, "health_soh": 100},
+        "vehicle": {"speed_kmh": 0, "position_km": 0, "acceleration_mps2": 0}
+    })
+
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print('3D Viewer connected')
+    emit('connected', {'message': 'Connected to 3D Viewer'})
+
+
+@socketio.on('request_update')
+def handle_update_request():
+    """Send telemetry update"""
+    telemetry_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        'data', 'telemetry_urban.json'
+    )
+    
+    if os.path.exists(telemetry_path):
+        with open(telemetry_path, 'r') as f:
+            data = json.load(f)
+            if data:
+                emit('telemetry_update', data[-1])
+
+
+def create_3d_viewer_html():
+    """Create HTML template for 3D viewer"""
+    html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Siemens EV - 3D Digital Twin Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            overflow: hidden;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            min-width: 300px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(76, 175, 80, 0.3);
+        }
+        #info-panel h2 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+        }
+        .metric-label {
+            color: #aaa;
+        }
+        .metric-value {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .status-good { color: #4CAF50; }
+        .status-warn { color: #FFC107; }
+        .status-critical { color: #f44336; }
+        
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .control-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .control-btn:hover {
+            background: #45a049;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading 3D Model...</div>
+    </div>
+    
+    <div id="info-panel" style="display: none;">
+        <h2>🚗 Siemens EV-X1 Digital Twin</h2>
+        <div class="metric">
+            <span class="metric-label">Speed:</span>
+            <span class="metric-value" id="speed">0 km/h</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Battery SOC:</span>
+            <span class="metric-value" id="battery-soc">0%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Motor Power:</span>
+            <span class="metric-value" id="motor-power">0 kW</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Motor Temp:</span>
+            <span class="metric-value" id="motor-temp">0°C</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Battery Temp:</span>
+            <span class="metric-value" id="battery-temp">0°C</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Distance:</span>
+            <span class="metric-value" id="distance">0 km</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Motor Health:</span>
+            <span class="metric-value status-good" id="motor-health">100%</span>
+        </div>
+    </div>
+    
+    <div id="controls" style="display: none;">
+        <h3 style="margin-bottom: 10px;">View Controls</h3>
+        <button class="control-btn" onclick="resetCamera()">Reset View</button>
+        <button class="control-btn" onclick="toggleRotation()">Auto Rotate</button>
+        <button class="control-btn" onclick="toggleWireframe()">Wireframe</button>
+    </div>
+    
+    <div id="legend" style="display: none;">
+        <h4 style="margin-bottom: 10px;">Component Legend</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #87CEEB;"></div>
+            <span>Chassis</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #333;"></div>
+            <span>Wheels</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #FF6347;"></div>
+            <span>Motor</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #FFA500;"></div>
+            <span>Battery Pack</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4CAF50;"></div>
+            <span>Battery Cells (Cool)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #FFEB3B;"></div>
+            <span>Battery Cells (Warm)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #F44336;"></div>
+            <span>Battery Cells (Hot)</span>
+        </div>
+    </div>
+    
+    <script>
+        // Three.js Setup
+        let scene, camera, renderer, controls;
+        let vehicleGroup, motorMesh, batteryMesh, wheelMeshes = [];
+        let batteryCells = [];
+        let autoRotate = false;
+        let telemetryData = null;
+        
+        // Initialize Scene
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            scene.fog = new THREE.Fog(0x0a0a0a, 10, 50);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(8, 5, 8);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2;
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            const pointLight = new THREE.PointLight(0x4CAF50, 0.5);
+            pointLight.position.set(0, 5, 0);
+            scene.add(pointLight);
+            
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x1a1a1a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Grid
+            const gridHelper = new THREE.GridHelper(50, 50, 0x4CAF50, 0x333333);
+            scene.add(gridHelper);
+            
+            // Create Vehicle
+            createVehicle();
+            
+            // Hide loading, show panels
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('info-panel').style.display = 'block';
+            document.getElementById('controls').style.display = 'block';
+            document.getElementById('legend').style.display = 'block';
+            
+            // Start animation
+            animate();
+            
+            // Load telemetry
+            loadTelemetry();
+            setInterval(loadTelemetry, 2000);
+        }
+        
+        function createVehicle() {
+            vehicleGroup = new THREE.Group();
+            
+            // Chassis
+            const chassisGeometry = new THREE.BoxGeometry(4.5, 1.5, 1.8);
+            const chassisMaterial = new THREE.MeshStandardMaterial({
+                color: 0x87CEEB,
+                transparent: true,
+                opacity: 0.7,
+                metalness: 0.6,
+                roughness: 0.4
+            });
+            const chassis = new THREE.Mesh(chassisGeometry, chassisMaterial);
+            chassis.position.y = 0.75;
+            chassis.castShadow = true;
+            vehicleGroup.add(chassis);
+            
+            // Wheels
+            const wheelGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 32);
+            const wheelMaterial = new THREE.MeshStandardMaterial({
+                color: 0x222222,
+                metalness: 0.8,
+                roughness: 0.3
+            });
+            
+            const wheelPositions = [
+                [-1.3, 0.35, -1.0],
+                [-1.3, 0.35, 1.0],
+                [1.3, 0.35, -1.0],
+                [1.3, 0.35, 1.0]
+            ];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+                wheel.position.set(pos[0], pos[1], pos[2]);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.castShadow = true;
+                vehicleGroup.add(wheel);
+                wheelMeshes.push(wheel);
+            });
+            
+            // Motor
+            const motorGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.5, 32);
+            const motorMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFF6347,
+                metalness: 0.9,
+                roughness: 0.2,
+                emissive: 0xFF6347,
+                emissiveIntensity: 0.2
+            });
+            motorMesh = new THREE.Mesh(motorGeometry, motorMaterial);
+            motorMesh.position.set(-1.5, 0.3, 0);
+            motorMesh.rotation.z = Math.PI / 2;
+            motorMesh.castShadow = true;
+            vehicleGroup.add(motorMesh);
+            
+            // Battery Pack
+            const batteryGeometry = new THREE.BoxGeometry(2.5, 0.15, 1.4);
+            const batteryMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFFA500,
+                metalness: 0.7,
+                roughness: 0.3
+            });
+            batteryMesh = new THREE.Mesh(batteryGeometry, batteryMaterial);
+            batteryMesh.position.set(0, -0.075, 0);
+            batteryMesh.castShadow = true;
+            vehicleGroup.add(batteryMesh);
+            
+            // Battery Cells
+            const cellSize = 0.08;
+            const cellsX = 10;
+            const cellsY = 8;
+            const batteryLength = 2.5;
+            const batteryWidth = 1.4;
+            
+            for (let i = 0; i < cellsX; i++) {
+                for (let j = 0; j < cellsY; j++) {
+                    const cellGeometry = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
+                    const cellMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x4CAF50,
+                        metalness: 0.5,
+                        roughness: 0.5
+                    });
+                    const cell = new THREE.Mesh(cellGeometry, cellMaterial);
+                    
+                    const x = -batteryLength/2 + (i + 0.5) * (batteryLength / cellsX);
+                    const z = -batteryWidth/2 + (j + 0.5) * (batteryWidth / cellsY);
+                    
+                    cell.position.set(x, -0.075, z);
+                    vehicleGroup.add(cell);
+                    batteryCells.push(cell);
+                }
+            }
+            
+            scene.add(vehicleGroup);
+            vehicleGroup.position.y = 0;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Auto rotation
+            if (autoRotate) {
+                vehicleGroup.rotation.y += 0.005;
+            }
+            
+            // Animate wheels
+            if (telemetryData) {
+                const speed = telemetryData.vehicle.speed_kmh / 100;
+                wheelMeshes.forEach(wheel => {
+                    wheel.rotation.x += speed * 0.1;
+                });
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        function loadTelemetry() {
+            fetch('/api/telemetry/latest')
+                .then(response => response.json())
+                .then(data => {
+                    telemetryData = data;
+                    updateVisualization(data);
+                    updateInfo(data);
+                })
+                .catch(err => console.error('Error loading telemetry:', err));
+        }
+        
+        function updateVisualization(data) {
+            // Update motor color based on temperature
+            if (motorMesh) {
+                const temp = data.motor.temperature_c;
+                const color = temperatureToColor(temp, 25, 120);
+                motorMesh.material.color.setHex(color);
+                motorMesh.material.emissive.setHex(color);
+                motorMesh.material.emissiveIntensity = temp > 80 ? 0.5 : 0.2;
+            }
+            
+            // Update battery color based on SOC
+            if (batteryMesh) {
+                const soc = data.battery.soc_percent;
+                const color = socToColor(soc);
+                batteryMesh.material.color.setHex(color);
+            }
+            
+            // Update battery cells
+            const batteryTemp = data.battery.temperature_c;
+            batteryCells.forEach((cell, idx) => {
+                const variation = (Math.random() - 0.5) * 4;
+                const cellTemp = batteryTemp + variation;
+                const color = temperatureToColor(cellTemp, 20, 60);
+                cell.material.color.setHex(color);
+            });
+        }
+        
+        function updateInfo(data) {
+            document.getElementById('speed').textContent = data.vehicle.speed_kmh.toFixed(1) + ' km/h';
+            document.getElementById('battery-soc').textContent = data.battery.soc_percent.toFixed(1) + '%';
+            document.getElementById('motor-power').textContent = data.motor.power_kw.toFixed(1) + ' kW';
+            document.getElementById('motor-temp').textContent = data.motor.temperature_c.toFixed(1) + '°C';
+            document.getElementById('battery-temp').textContent = data.battery.temperature_c.toFixed(1) + '°C';
+            document.getElementById('distance').textContent = data.vehicle.position_km.toFixed(2) + ' km';
+            document.getElementById('motor-health').textContent = data.motor.health_score.toFixed(1) + '%';
+            
+            // Update health status color
+            const healthEl = document.getElementById('motor-health');
+            const health = data.motor.health_score;
+            if (health > 90) {
+                healthEl.className = 'metric-value status-good';
+            } else if (health > 70) {
+                healthEl.className = 'metric-value status-warn';
+            } else {
+                healthEl.className = 'metric-value status-critical';
+            }
+        }
+        
+        function temperatureToColor(temp, minTemp, maxTemp) {
+            const normalized = Math.max(0, Math.min(1, (temp - minTemp) / (maxTemp - minTemp)));
+            
+            if (normalized < 0.5) {
+                // Blue to Yellow
+                const r = Math.floor(normalized * 2 * 255);
+                const g = Math.floor(normalized * 2 * 255);
+                const b = 255 - Math.floor(normalized * 2 * 255);
+                return (r << 16) | (g << 8) | b;
+            } else {
+                // Yellow to Red
+                const r = 255;
+                const g = 255 - Math.floor((normalized - 0.5) * 2 * 255);
+                const b = 0;
+                return (r << 16) | (g << 8) | b;
+            }
+        }
+        
+        function socToColor(soc) {
+            if (soc > 50) return 0x4CAF50; // Green
+            if (soc > 20) return 0xFFC107; // Yellow
+            return 0xF44336; // Red
+        }
+        
+        function resetCamera() {
+            camera.position.set(8, 5, 8);
+            camera.lookAt(0, 0, 0);
+            controls.reset();
+        }
+        
+        function toggleRotation() {
+            autoRotate = !autoRotate;
+        }
+        
+        function toggleWireframe() {
+            scene.traverse((object) => {
+                if (object.material) {
+                    object.material.wireframe = !object.material.wireframe;
+                }
+            });
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>"""
+    
+    # Create templates directory
+    templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
+    os.makedirs(templates_dir, exist_ok=True)
+    
+    with open(os.path.join(templates_dir, 'viewer_3d.html'), 'w') as f:
+        f.write(html_content)
+
+
+def main():
+    """Start the 3D visualization server"""
+    print("="*60)
+    print("Siemens Automobile Digital Twin - 3D Visualization Server")
+    print("="*60)
+    
+    # Create HTML template
+    create_3d_viewer_html()
+    
+    print("\nStarting 3D visualization server...")
+    print("3D Viewer URL: http://localhost:5001")
+    print("\nPress Ctrl+C to stop the server")
+    print("="*60)
+    
+    socketio.run(app, host='0.0.0.0', port=5001, debug=False, allow_unsafe_werkzeug=True)
+
+
+if __name__ == "__main__":
+    main()
